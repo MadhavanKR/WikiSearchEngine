@@ -117,7 +117,20 @@ public class Indexer extends Thread {
 						refmatcher=refpat.matcher(pageContent);
 						if(refmatcher.find()){
 							String referenceString = refmatcher.group(0);
-							
+							process(referenceString,"r",i*5000+pageCount);
+							pageContent = refmatcher.replaceAll(" ");
+						}
+						catmatcher=catpat.matcher(pageContent);
+						if(catmatcher.find()){
+							String catString = catmatcher.group(0);
+							process(catString,"c",i*5000+pageCount);
+							pageContent = catmatcher.replaceAll(" ");
+						}
+						linkmatcher=linkpat.matcher(pageContent);
+						if(linkmatcher.find()){
+							String linkString = linkmatcher.group(0);
+							process(linkString,"c",i*5000+pageCount);
+							pageContent = linkmatcher.replaceAll(" ");
 						}
 					}
 					else

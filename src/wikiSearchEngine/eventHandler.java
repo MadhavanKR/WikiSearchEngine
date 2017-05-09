@@ -67,7 +67,7 @@ public class eventHandler extends DefaultHandler {
 				try {
 					currentWriter = new BufferedWriter(new FileWriter(new File(fileName+fileNum)));
 					currentWriter.append(pageContent);
-					currentWriter.append("~~~~~DELIMITER~~~~~");
+					currentWriter.append("\n~~~~~DELIMITER~~~~~\n");
 					} 
 				catch (IOException e) {
 				e.printStackTrace();
