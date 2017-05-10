@@ -1,14 +1,21 @@
 package wikiSearchEngine;
 
 import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import org.apache.log4j.Logger;
 
 public class Indexer extends Thread {
 	String rawFileName;
@@ -29,11 +36,17 @@ public class Indexer extends Thread {
 	public static HashMap<String,Integer> stopWords;
 	public HashMap<String,HashMap<Integer,HashMap<String,Integer>>> index;
 	
-	public void Indexer(String fileName,int start,int end){
+	public final static Logger log = Logger.getLogger(Logger.class);
+
+	
+	public Indexer(String fileName,int start,int end){
+		
+		log.info("Initializing the indexer variables");
+		
 		this.start = start;
 		this.end = end;
 		this.rawFileName = fileName;
-		pageCount=5000*start;
+		pageCount=1000*start;
 		
 		stopWords = new HashMap<String,Integer>();
 		for(String st:stopWordArray)
@@ -41,17 +54,19 @@ public class Indexer extends Thread {
 		System.out.println(stopWords);
 		
 		index = new HashMap<String,HashMap<Integer,HashMap<String,Integer>>>();
+		
+		log.info("completed initializing!");
 	}
 	
 	
 	public String[] stopWordsRemover(String line){
 		String[] wordList = line.split("\\P{Alnum}");
-		ArrayList<String> words = new ArrayList<String>();
+		StringBuilder words = new StringBuilder("");
 		for(String curWord:wordList){
 			if(!stopWords.containsKey(curWord))
-				words.add(curWord);
+				words.append(curWord+"-");
 		}
-		return (String[])words.toArray();
+		return words.toString().split("-");
 	}
 	
 	public void indexTheWord(String word,int pageCount,String type){
@@ -100,8 +115,12 @@ public class Indexer extends Thread {
 	
 	public void run(){
 		//HashMap<String,HashMap<String,>>
+		
+		log.info("starting the thread");
+		
 		for(int i=start;i<end;i++)
 		{
+			log.info("processing rawFile"+i);
 			String curRawFile = rawFileName+i;
 			String line;
 			try
@@ -109,41 +128,142 @@ public class Indexer extends Thread {
 				BufferedReader curReader = new BufferedReader(new FileReader(new File(curRawFile)));
 				StringBuilder pageContentBuilder = new StringBuilder();
 				String pageContent;
-				while((line=curReader.readLine())!=null){
+				log.info("starting the processing..");
+				int lineNum=0;
+				while((line=curReader.readLine())!=null)
+				{
+					//System.out.println("in here!!");
+					//lineNum++;
+					//if(lineNum%1000 == 0)
+						//log.info("line number + "+lineNum);
 					if(line.compareTo("~~~~~DELIMITER~~~~~")==0)
 					{
 						pageCount++;
 						pageContent = pageContentBuilder.toString();
 						refmatcher=refpat.matcher(pageContent);
 						if(refmatcher.find()){
-							String referenceString = refmatcher.group(0);
-							process(referenceString,"r",i*5000+pageCount);
-							pageContent = refmatcher.replaceAll(" ");
+							String referenceStrings = refmatcher.group(0);
+							int x=0;
+							for(String referenceString:referenceStrings.split(" "))
+							{
+								if(x==0)
+								{
+									x++;
+									continue;
+								}
+								x++;
+								process(referenceString,"r",i*1000+pageCount);
+								pageContent = refmatcher.replaceAll(" ");
+							}
 						}
 						catmatcher=catpat.matcher(pageContent);
-						if(catmatcher.find()){
-							String catString = catmatcher.group(0);
-							process(catString,"c",i*5000+pageCount);
-							pageContent = catmatcher.replaceAll(" ");
+						if(catmatcher.find())
+						{
+							String[] catStrings = catmatcher.group(0).split(" ");
+							int x=0;
+							for(x=1;x<catStrings.length;x++)
+							{
+								process(catStrings[x],"c",i*1000+pageCount);
+								pageContent = catmatcher.replaceAll(" ");
+							}
 						}
 						linkmatcher=linkpat.matcher(pageContent);
-						if(linkmatcher.find()){
-							String linkString = linkmatcher.group(0);
-							process(linkString,"c",i*5000+pageCount);
-							pageContent = linkmatcher.replaceAll(" ");
+						if(linkmatcher.find())
+						{
+							String links = linkmatcher.group(0);
+							httpmatcher=http.matcher(links);
+							while(httpmatcher.find())
+							{
+								String linkStrings = httpmatcher.group(0);
+								int x=0;
+								for(String linkString:linkStrings.split(" "))
+								{
+									if(x==0)
+									{
+										x++;
+										continue;
+									}
+									x++;								
+									process(linkString,"l",i*1000+pageCount);
+									pageContent = linkmatcher.replaceAll(" ");
+								}
+							}
 						}
+						infomatcher = infopat.matcher(pageContent);
+						if(infomatcher.find())
+						{
+							String infoStrings = infomatcher.group(0);
+							int x=0;
+							for(String infoString:infoStrings.split(" "))
+							{
+								if(x==0)
+								{
+									x++;
+									continue;
+								}
+								x++;								
+								process(infoString,"i",i*1000+pageCount);
+								pageContent = infomatcher.replaceAll(" ");
+							}
+						}
+						garbagematcher = garbage.matcher(pageContent);
+						pageContent = garbagematcher.replaceAll(" ");
+						process(pageContent,"b",i*1000+pageCount);
 					}
 					else
 					{
 						pageContentBuilder.append(line);
 					}
 				}
-				
+				log.info("completed processing rawFile"+i);
+				log.info("calling the Writer");
+				writeIndexFile(i);				
 			}
 			catch(IOException e)
 			{
-				e.printStackTrace();
+				log.info(e.getMessage());
 			}
+		}
+	}
+
+
+	private void writeIndexFile(int i) {
+		try 
+		{
+			log.info("starting to write the index file"+i);
+			BufferedWriter writer = new BufferedWriter(new FileWriter(new File("indexFile"+i)));
+			StringBuilder curLine = new StringBuilder();
+			Set<String> words = index.keySet();
+			Iterator<String> iter = words.iterator();
+			while(iter.hasNext())
+			{
+				String curWord = iter.next();
+				curLine.append(curWord+"-");
+				HashMap<Integer,HashMap<String,Integer>> pageIdToType = index.get(curWord) ;
+				Set<Integer> docIds = pageIdToType.keySet();
+				Iterator<Integer> pageIter = docIds.iterator();
+				while(pageIter.hasNext()){
+					Integer curPage = pageIter.next();
+					curLine.append(curPage+" ");
+					HashMap<String,Integer> typeToFreq = pageIdToType.get(curPage); 
+					Set<String> types = typeToFreq.keySet();
+					Iterator<String> typeIterator = types.iterator();
+					while(typeIterator.hasNext()){
+						String curType = typeIterator.next();
+						curLine.append(curType+typeToFreq.get(curType)+" ");
+					}
+					curLine.append("|");
+				}
+				curLine.append("\n");
+			}
+			writer.write(curLine.toString());
+			writer.close();
+			index.clear();
+			log.info("completed writing the index file"+i);
+		}
+		catch (IOException e) 
+		{
+			log.info(e.getMessage());
 		}
 	}
 	
