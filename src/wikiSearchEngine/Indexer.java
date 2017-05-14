@@ -10,12 +10,30 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.Map.Entry;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.*;
 
 import org.apache.log4j.Logger;
+
+
+class scorecomp implements Comparator<Entry<Integer, HashMap<String, Integer>>>{
+	 
+    @Override
+    public int compare(Entry<Integer, HashMap<String, Integer>> e1,Entry<Integer, HashMap<String, Integer>> e2) {
+    	if(e1.getValue().containsKey("score") && e2.getValue().containsKey("score"))
+    			{
+    				if (e1.getValue().get("score")<e2.getValue().get("score"))
+    					return 1;			
+    				else
+    					return -1;
+    			}
+    	return -1;
+    }
+} 
 
 public class Indexer extends Thread {
 	String rawFileName;
@@ -46,12 +64,12 @@ public class Indexer extends Thread {
 		this.start = start;
 		this.end = end;
 		this.rawFileName = fileName;
-		pageCount=1000*start;
+		pageCount=5000*start;
 		
 		stopWords = new HashMap<String,Integer>();
 		for(String st:stopWordArray)
 			stopWords.put(st,1);
-		System.out.println(stopWords);
+		//System.out.println(stopWords);
 		
 		index = new HashMap<String,HashMap<Integer,HashMap<String,Integer>>>();
 		
@@ -70,38 +88,10 @@ public class Indexer extends Thread {
 	}
 	
 	public void indexTheWord(String word,int pageCount,String type){
-		
-		if(index.containsKey(word)){
-			HashMap<Integer,HashMap<String,Integer>> pageToTypeMap = index.get(word);
-			if(pageToTypeMap!=null && pageToTypeMap.containsKey(pageCount)){
-				HashMap<String,Integer> typeToFreqMap = pageToTypeMap.get(pageCount);
-				if(typeToFreqMap!=null && typeToFreqMap.containsKey(type))
-				{
-					int freq = typeToFreqMap.get(type);
-					freq++;
-					typeToFreqMap.put(type, freq);
-				}
-				else
-				{
-					typeToFreqMap.put(type, 1);
-				}
-			}
-			else{
-				HashMap<String,Integer> mapTypeToFreq = new HashMap<String,Integer>();
-				mapTypeToFreq.put(type, 1);
-				pageToTypeMap.put(pageCount, mapTypeToFreq);
-			}
-		}
-		else{
-			HashMap<Integer,HashMap<String,Integer>> mapPageToType = new HashMap<Integer,HashMap<String,Integer>>();
-			HashMap<String,Integer> mapTypeToFreq = new HashMap<String,Integer>();
-			mapTypeToFreq.put(type, 1);
-			mapPageToType.put(pageCount, mapTypeToFreq);
-			index.put(word, mapPageToType);
-		}	
 	}
 	
 	public void process(String line,String type,int pageCount){
+		//log.info("sttarting processing for "+line);
 		String[] words;
 		words = stopWordsRemover(line);
 		for(String curWord:words){
@@ -109,8 +99,41 @@ public class Indexer extends Thread {
 			stem.add(curWord.toCharArray(), curWord.toCharArray().length);
 			stem.stem();
 			curWord=stem.toString();
-			indexTheWord(curWord,pageCount,type);
+//			indexTheWord(curWord,pageCount,type);
+			if(curWord.length()<3)
+				continue;
+			if(index.containsKey(curWord))
+			{
+				HashMap<Integer,HashMap<String,Integer>> pageToTypeMap = index.get(curWord);
+				if(pageToTypeMap!=null && pageToTypeMap.containsKey(pageCount)){
+					HashMap<String,Integer> typeToFreqMap = pageToTypeMap.get(pageCount);
+					if(typeToFreqMap!=null && typeToFreqMap.containsKey(type))
+					{
+						int freq = typeToFreqMap.get(type);
+						freq++;
+						typeToFreqMap.put(type, freq);
+					}
+					else
+					{
+						typeToFreqMap.put(type, 1);
+					}
+				}
+				else{
+					HashMap<String,Integer> mapTypeToFreq = new HashMap<String,Integer>();
+					mapTypeToFreq.put(type, 1);
+					pageToTypeMap.put(pageCount, mapTypeToFreq);
+				}
+			}
+			else{
+				HashMap<Integer,HashMap<String,Integer>> mapPageToType = new HashMap<Integer,HashMap<String,Integer>>();
+				HashMap<String,Integer> mapTypeToFreq = new HashMap<String,Integer>();
+				mapTypeToFreq.put(type, 1);
+				mapPageToType.put(pageCount, mapTypeToFreq);
+				index.put(curWord, mapPageToType);
+			}	
+
 		}
+		//log.info("ending processing for "+line);
 	}
 	
 	public void run(){
@@ -134,39 +157,45 @@ public class Indexer extends Thread {
 				{
 					//System.out.println("in here!!");
 					//lineNum++;
-					//if(lineNum%1000 == 0)
+					//if(lineNum%5000 == 0)
 						//log.info("line number + "+lineNum);
 					if(line.compareTo("~~~~~DELIMITER~~~~~")==0)
 					{
+						//log.info("encountered delimiter");
 						pageCount++;
 						pageContent = pageContentBuilder.toString();
 						refmatcher=refpat.matcher(pageContent);
 						if(refmatcher.find()){
 							String referenceStrings = refmatcher.group(0);
+							referenceStrings=referenceStrings.replaceFirst("== ?references ?==", " ");
 							int x=0;
-							for(String referenceString:referenceStrings.split(" "))
+							for(String referenceString:referenceStrings.split("="))
 							{
-								if(x==0)
+								if(x%2==0)
 								{
 									x++;
 									continue;
 								}
 								x++;
-								process(referenceString,"r",i*1000+pageCount);
-								pageContent = refmatcher.replaceAll(" ");
+								process(referenceString,"r",i*5000+pageCount);
+								//log.info("before : "+pageContent);
+								//log.info("after : "+pageContent);
 							}
 						}
+						pageContent = refmatcher.replaceAll(" ");
 						catmatcher=catpat.matcher(pageContent);
 						if(catmatcher.find())
 						{
-							String[] catStrings = catmatcher.group(0).split(" ");
+							String[] catStrings = catmatcher.group(0).split(":");
 							int x=0;
 							for(x=1;x<catStrings.length;x++)
 							{
-								process(catStrings[x],"c",i*1000+pageCount);
-								pageContent = catmatcher.replaceAll(" ");
+								process(catStrings[x],"c",i*5000+pageCount);
+								//log.info("before : "+pageContent);
+								//log.info("after : "+pageContent);
 							}
 						}
+						pageContent = catmatcher.replaceAll(" ");
 						linkmatcher=linkpat.matcher(pageContent);
 						if(linkmatcher.find())
 						{
@@ -178,40 +207,45 @@ public class Indexer extends Thread {
 								int x=0;
 								for(String linkString:linkStrings.split(" "))
 								{
-									if(x==0)
+									if(x%2==0)
 									{
 										x++;
 										continue;
 									}
 									x++;								
-									process(linkString,"l",i*1000+pageCount);
-									pageContent = linkmatcher.replaceAll(" ");
+									process(linkString,"l",i*5000+pageCount);
+									//log.info("before : "+pageContent);
+									//log.info("after : "+pageContent);
 								}
 							}
 						}
+						pageContent = linkmatcher.replaceAll(" ");
 						infomatcher = infopat.matcher(pageContent);
 						if(infomatcher.find())
 						{
 							String infoStrings = infomatcher.group(0);
 							int x=0;
-							for(String infoString:infoStrings.split(" "))
+							for(String infoString:infoStrings.split("="))
 							{
-								if(x==0)
+								if(x%2==0)
 								{
 									x++;
 									continue;
 								}
 								x++;								
-								process(infoString,"i",i*1000+pageCount);
-								pageContent = infomatcher.replaceAll(" ");
+								process(infoString,"i",i*5000+pageCount);
 							}
 						}
+						pageContent = infomatcher.replaceAll(" ");
 						garbagematcher = garbage.matcher(pageContent);
 						pageContent = garbagematcher.replaceAll(" ");
-						process(pageContent,"b",i*1000+pageCount);
+						process(pageContent,"b",i*5000+pageCount);
+						pageContentBuilder=null;
 					}
 					else
 					{
+						if(pageContentBuilder==null)
+							pageContentBuilder=new StringBuilder("");
 						pageContentBuilder.append(line);
 					}
 				}
@@ -233,26 +267,38 @@ public class Indexer extends Thread {
 			log.info("starting to write the index file"+i);
 			BufferedWriter writer = new BufferedWriter(new FileWriter(new File("indexFile"+i)));
 			StringBuilder curLine = new StringBuilder();
-			Set<String> words = index.keySet();
-			Iterator<String> iter = words.iterator();
-			while(iter.hasNext())
+//			Set<String> words = index.keySet();
+//			Iterator<String> iter = words.iterator();
+			TreeSet<String> words = new TreeSet<String>(index.keySet());
+			for(String curWord:words)
 			{
-				String curWord = iter.next();
 				curLine.append(curWord+"-");
-				HashMap<Integer,HashMap<String,Integer>> pageIdToType = index.get(curWord) ;
-				Set<Integer> docIds = pageIdToType.keySet();
-				Iterator<Integer> pageIter = docIds.iterator();
-				while(pageIter.hasNext()){
-					Integer curPage = pageIter.next();
+				HashMap<Integer,HashMap<String,Integer>> temp;
+				temp = index.get(curWord);
+//				HashMap<Integer,HashMap<String,Integer>> pageIdToType = index.get(curWord) ;
+//				Set<Integer> docIds = pageIdToType.keySet();
+//				Iterator<Integer> pageIter = docIds.iterator();
+				//TreeSet<Entry<Integer, HashMap<String, Integer>>> pageIdToType = TreeSet<Entry<Integer,HashMap<String, Integer>>>(new scorecomp());
+	    		TreeSet<Entry<Integer, HashMap<String, Integer>>> pageIdToType =new TreeSet<Entry<Integer, HashMap<String, Integer>>>(new scorecomp());
+	    		pageIdToType.addAll(temp.entrySet());
+				int count=0;
+				for(Entry<Integer,HashMap<String,Integer>> e:pageIdToType){
+					count++;
+					if(count>10)
+						break;
+					Integer curPage = e.getKey();
 					curLine.append(curPage+" ");
-					HashMap<String,Integer> typeToFreq = pageIdToType.get(curPage); 
-					Set<String> types = typeToFreq.keySet();
-					Iterator<String> typeIterator = types.iterator();
-					while(typeIterator.hasNext()){
-						String curType = typeIterator.next();
-						curLine.append(curType+typeToFreq.get(curType)+" ");
+//					HashMap<String,Integer> typeToFreq = pageIdToType.get(curPage); 
+//					Set<String> types = typeToFreq.keySet();
+//					Iterator<String> typeIterator = types.iterator();
+//					//TreeSet<Entry<String>> types = new TreeSet<Entry<String>>();
+					HashMap<String,Integer> typeToFreq = e.getValue();
+					for(String curType:typeToFreq.keySet()){
+						curLine.append(curType);
+						curLine.append(typeToFreq.get(curType).toString());
 					}
 					curLine.append("|");
+					typeToFreq.clear();
 				}
 				curLine.append("\n");
 			}
