@@ -63,7 +63,7 @@ public class eventHandler extends DefaultHandler {
 		}
 		else if(qName.compareTo("text")==0)
 		{
-			if(pageCount%100 == 0){
+			if(pageCount%5000 == 0){
 				try {
 					currentWriter = new BufferedWriter(new FileWriter(new File(fileName+fileNum)));
 					currentWriter.append(pageContent);

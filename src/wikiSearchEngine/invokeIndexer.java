@@ -16,8 +16,8 @@ public class invokeIndexer {
 			int pageCount = Integer.parseInt(read.readLine());
 			System.out.println("rawFileCount = "+rawFileCount+"\n pageCount = "+pageCount);
 			int fileCount = 0;
-			new Indexer("rawFile",0,1).start();
-			/*while(fileCount<rawFileCount){
+			//new Indexer("rawFile",1,2).start();
+			while(fileCount<rawFileCount){
 				if(fileCount + 10 > rawFileCount)
 				{
 					new Indexer("rawFile",fileCount,fileCount+rawFileCount).start();
@@ -30,7 +30,7 @@ public class invokeIndexer {
 					System.out.println("calling the thread for rawFile"+fileCount+" to "+fileCount+10);
 					fileCount+=10;
 				}
-			}*/
+			}
 		} 
 		catch (FileNotFoundException e) {
 			e.printStackTrace();
